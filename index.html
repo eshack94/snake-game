@@ -1,263 +1,128 @@
 <!DOCTYPE html>
-<html>
-  <head>
-  	<title>Snake Game</title>
-    <link href="https://fonts.googleapis.com/css?family=Oswald" rel="stylesheet">
 
-  </head>
+<!--when mouse moves the pointer function is launched-->
+<body onmousemove='pointer(event)'>
+    <script>
 
-  <body>
+        //object point (in fact it's a ring) with x and y coordinates and radius r
+        var point = function (x, y, r) {
+            this.x = x;
+            this.y = y;
+            this.r = r;
+            //velocity along axis Ox and Oy
+            this.vx = 0;
+            this.vy = 0;
+            //acceleration (change of velocity) along axis Ox and Oy
+            this.ax = 0;
+            this.ay = 0;
+            //and random color
+            this.c = '#' + (0x1000000 + (Math.random()) * 0xffffff).toString(16).substr(1, 6);
 
-    <div id="score">0</div>
-    <canvas id="gameCanvas" width="300" height="300"></canvas>
+            //a method for calculating a distance to another point with a,b coordinates, this point will be an attractive point or cursor of the mouse
+            this.s = function (a, b) {
+                return Math.sqrt((this.x - a) * (this.x - a) + (this.y - b) * (this.y - b));
+            }
 
-    <style>
-      #gameCanvas {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-      }
+            //this method calculates the acceleration (the longer distance to the attractive point the less accelertaion (force))
+            this.attr = function (a, b) {
+                var s = this.s(a, b);
+                this.ax = -6 * (this.x - a) / (s);
+                this.ay = -6 * (this.y - b) / (s);
+                //here we slow down the point a little to make it not so nervous...
+                if (s < 50 && s > 25) {
+                    this.vx *= 0.9;
+                    this.vy *= 0.9;
+                }
+                //acceleration is a change of velocity, we add acceleration to the velocity
+                this.vy += this.ay;
+                this.vx += this.ax;;
+            }
+            //a method of moving and here we change the velocity if the point collides the edges of the canvas
+            this.move = function (dt) {
+                if (this.x + this.vx * dt < 0 || this.x + this.vx * dt > W)
+                    this.vx = -this.vx;
+                if (this.y + this.vy * dt < 0 || this.y + this.vy * dt > H)
+                    this.vy = -this.vy;
 
-      #score {
-        text-align: center;
-        font-size: 140px;
-        font-family: 'Antic Slab', serif;
-      }
-    </style>
-  </body>
+                this.x += this.vx * dt;
+                this.y += this.vy * dt;
+                this.vx *= 0.999;
+                this.vy *= 0.999;
+            }
 
-  <script>
-    const GAME_SPEED = 100;
-    const CANVAS_BORDER_COLOUR = 'black';
-    const CANVAS_BACKGROUND_COLOUR = "white";
-    const SNAKE_COLOUR = 'lightgreen';
-    const SNAKE_BORDER_COLOUR = 'darkgreen';
-    const FOOD_COLOUR = 'red';
-    const FOOD_BORDER_COLOUR = 'darkred';
+        }
+        //we need plenty of such points, this function-object will keep them all in an point array, it will slso have all necessary methods
+        var hive = function (n, W, H, r) {
+            this.n = n;
+            this.points = [];
+            for (var i = 0; i < n; i++)
+                this.points.push(new point(Math.random() * 100, Math.random() * 100, r));
 
-    let snake = [
-      {x: 150, y: 150},
-      {x: 140, y: 150},
-      {x: 130, y: 150},
-      {x: 120, y: 150},
-      {x: 110, y: 150}
-    ]
+            //here we draw filling up the canvas with black a little (0.1 opacity) to have a fading trail
+            this.draw = function (canvas, ctx) {
+                ctx.fillStyle = 'rgba(0,0,0,0.1)';
+                ctx.fillRect(0, 0, W, H);
 
-    // The user's score
-    let score = 0;
-    // When set to true the snake is changing direction
-    let changingDirection = false;
-    // Food x-coordinate
-    let foodX;
-    // Food y-coordinate
-    let foodY;
-    // Horizontal velocity
-    let dx = 10;
-    // Vertical velocity
-    let dy = 0;
+                for (var i = 0; i < n; i++) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = this.points[i].c;
+                    ctx.moveTo(this.points[i].x, this.points[i].y);
+                    ctx.arc(this.points[i].x - this.points[i].r, this.points[i].y, this.points[i].r, 0, 6.28);
+                    ctx.stroke();
+                }
+            }
+            //we have dt here as a time between calls of requestAnimationFrame, we will use it calculating the distance to move: S=V*T
+            this.move = function () {
+                var now = Date.now();
+                var dt = (now - lastrefresh) / 1000.0;
+                for (var i = 0; i < n; i++)
+                    this.points[i].move(dt);
+                lastrefresh = now;
+            }
+            //all the points have to be attracted, this method do it for every point
+            this.attr = function (a, b) {
+                for (var i = 0; i < n; i++)
+                    this.points[i].attr(a, b);
+            }
+        }
 
-    // Get the canvas element
-    const gameCanvas = document.getElementById("gameCanvas");
-    // Return a two dimensional drawing context
-    const ctx = gameCanvas.getContext("2d");
+        //we add canvas
+        var W = document.documentElement.clientWidth;
+        var H = document.documentElement.clientHeight - 50;
 
-    // Start game
-    main();
-    // Create the first food location
-    createFood();
-    // Call changeDirection whenever a key is pressed
-    document.addEventListener("keydown", changeDirection);
+        var canvas = document.createElement('canvas'),
+            ctx = canvas.getContext('2d');
+        document.body.appendChild(canvas);
+        canvas.width = W;
+        canvas.height = H;
+
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, W, H);
+        var A = 300;
+        var B = 1500;
+        var U = 300;
+        var lastrefresh = 0;
+
+        //this function will calculate the coordinates of the attracting point, the coordinates of cursor
+        function pointer(event) {
+            A = event.clientX;
+            B = event.clientY;
+        }
 
 
-    /**
-     * Main function of the game
-     * called repeatedly to advance the game
-     */
-    function main() {
-      // If the game ended return early to stop game
-      if (didGameEnd()) return;
+        lastrefresh = Date.now();
+        var Q = new hive(U, W, H, W * 15 / 1366);
 
-      setTimeout(function onTick() {
-        changingDirection = false;
-        clearCanvas();
-        drawFood();
-        advanceSnake();
-        drawSnake();
+        //main function
+        function doer() {
+            Q.attr(A, B);
+            Q.move();
+            Q.draw(canvas, ctx);
+            //we do everything and then start again
+            requestAnimationFrame(doer);
+        }
 
-        // Call game again
-        main();
-      }, GAME_SPEED)
-    }
+        doer();
 
-    /**
-     * Change the background colour of the canvas to CANVAS_BACKGROUND_COLOUR and
-     * draw a border around it
-     */
-    function clearCanvas() {
-      //  Select the colour to fill the drawing
-      ctx.fillStyle = CANVAS_BACKGROUND_COLOUR;
-      //  Select the colour for the border of the canvas
-      ctx.strokestyle = CANVAS_BORDER_COLOUR;
-
-      // Draw a "filled" rectangle to cover the entire canvas
-      ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
-      // Draw a "border" around the entire canvas
-      ctx.strokeRect(0, 0, gameCanvas.width, gameCanvas.height);
-    }
-
-    /**
-     * Draw the food on the canvas
-     */
-    function drawFood() {
-      ctx.fillStyle = FOOD_COLOUR;
-      ctx.strokestyle = FOOD_BORDER_COLOUR;
-      ctx.fillRect(foodX, foodY, 10, 10);
-      ctx.strokeRect(foodX, foodY, 10, 10);
-    }
-
-    /**
-     * Advances the snake by changing the x-coordinates of its parts
-     * according to the horizontal velocity and the y-coordinates of its parts
-     * according to the vertical veolocity
-     */
-    function advanceSnake() {
-      // Create the new Snake's head
-      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-      // Add the new head to the beginning of snake body
-      snake.unshift(head);
-
-      const didEatFood = snake[0].x === foodX && snake[0].y === foodY;
-      if (didEatFood) {
-        // Increase score
-        score += 10;
-        // Display score on screen
-        document.getElementById('score').innerHTML = score;
-
-        // Generate new food location
-        createFood();
-      } else {
-        // Remove the last part of snake body
-        snake.pop();
-      }
-    }
-
-    /**
-     * Returns true if the head of the snake touched another part of the game
-     * or any of the walls
-     */
-    function didGameEnd() {
-      for (let i = 4; i < snake.length; i++) {
-        if (snake[i].x === snake[0].x && snake[i].y === snake[0].y) return true
-      }
-
-      const hitLeftWall = snake[0].x < 0;
-      const hitRightWall = snake[0].x > gameCanvas.width - 10;
-      const hitToptWall = snake[0].y < 0;
-      const hitBottomWall = snake[0].y > gameCanvas.height - 10;
-
-      return hitLeftWall || hitRightWall || hitToptWall || hitBottomWall
-    }
-
-    /**
-     * Generates a random number that is a multiple of 10 given a minumum
-     * and a maximum number
-     * @param { number } min - The minimum number the random number can be
-     * @param { number } max - The maximum number the random number can be
-     */
-    function randomTen(min, max) {
-      return Math.round((Math.random() * (max-min) + min) / 10) * 10;
-    }
-
-    /**
-     * Creates random set of coordinates for the snake food.
-     */
-    function createFood() {
-      // Generate a random number the food x-coordinate
-      foodX = randomTen(0, gameCanvas.width - 10);
-      // Generate a random number for the food y-coordinate
-      foodY = randomTen(0, gameCanvas.height - 10);
-
-      // if the new food location is where the snake currently is, generate a new food location
-      snake.forEach(function isFoodOnSnake(part) {
-        const foodIsoNsnake = part.x == foodX && part.y == foodY;
-        if (foodIsoNsnake) createFood();
-      });
-    }
-
-    /**
-     * Draws the snake on the canvas
-     */
-    function drawSnake() {
-      // loop through the snake parts drawing each part on the canvas
-      snake.forEach(drawSnakePart)
-    }
-
-    /**
-     * Draws a part of the snake on the canvas
-     * @param { object } snakePart - The coordinates where the part should be drawn
-     */
-    function drawSnakePart(snakePart) {
-      // Set the colour of the snake part
-      ctx.fillStyle = SNAKE_COLOUR;
-
-      // Set the border colour of the snake part
-      ctx.strokestyle = SNAKE_BORDER_COLOUR;
-
-      // Draw a "filled" rectangle to represent the snake part at the coordinates
-      // the part is located
-      ctx.fillRect(snakePart.x, snakePart.y, 10, 10);
-
-      // Draw a border around the snake part
-      ctx.strokeRect(snakePart.x, snakePart.y, 10, 10);
-    }
-
-    /**
-     * Changes the vertical and horizontal velocity of the snake according to the
-     * key that was pressed.
-     * The direction cannot be switched to the opposite direction, to prevent the snake
-     * from reversing
-     * For example if the the direction is 'right' it cannot become 'left'
-     * @param { object } event - The keydown event
-     */
-    function changeDirection(event) {
-      const LEFT_KEY = 37;
-      const RIGHT_KEY = 39;
-      const UP_KEY = 38;
-      const DOWN_KEY = 40;
-      /**
-       * Prevent the snake from reversing
-       * Example scenario:
-       * Snake is moving to the right. User presses down and immediately left
-       * and the snake immediately changes direction without taking a step down first
-       */
-      if (changingDirection) return;
-      changingDirection = true;
-
-      const keyPressed = event.keyCode;
-
-      const goingUp = dy === -10;
-      const goingDown = dy === 10;
-      const goingRight = dx === 10;
-      const goingLeft = dx === -10;
-
-      if (keyPressed === LEFT_KEY && !goingRight) {
-        dx = -10;
-        dy = 0;
-      }
-      if (keyPressed === UP_KEY && !goingDown) {
-        dx = 0;
-        dy = -10;
-      }
-      if (keyPressed === RIGHT_KEY && !goingLeft) {
-        dx = 10;
-        dy = 0;
-      }
-      if (keyPressed === DOWN_KEY && !goingUp) {
-        dx = 0;
-        dy = 10;
-      }
-    }
-
-  </script>
-</html>
+    </script>
+</body>

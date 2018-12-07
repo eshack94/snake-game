@@ -1,0 +1,1 @@
+alert('Click all over the screen or at the bottom of canvas for endless. Quantity is in U variable-change it')
